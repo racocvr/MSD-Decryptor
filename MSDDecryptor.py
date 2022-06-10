@@ -37,15 +37,18 @@ def decrypt_header(f, header, aeskey):
 
     assert f.read(8).decode('ascii') == 'Salted__',"'Salted__' header not found"
 
-    # read the salt and md5 it
-    iv = hashlib.md5(f.read(8))
+    # read the salt and hash it
+    if len(aeskey) == 16:
+        iv = hashlib.md5(f.read(8)).digest()
+    else:
+        iv = hashlib.sha256(f.read(8)).digest()[:16]
 
-    print('decrypting header', header.model, 'with aeskey:', aeskey.hex(), 'and iv:', iv.hexdigest())
+    print('decrypting header', header.model, 'with aeskey:', aeskey.hex(), 'and iv:', iv.hex())
 
     encrypted = f.read(header.length - 16 - 8)
     assert binascii.crc32(encrypted) == encrypted_header_crc32, 'encrypted header crc32 mismatch (file corrupt!)'
 
-    aes = AES.new(aeskey, AES.MODE_CBC, iv.digest())
+    aes = AES.new(aeskey, AES.MODE_CBC, iv)
     decrypted = remove_padding(aes.decrypt(encrypted))
     assert binascii.crc32(decrypted) == decrypted_header_crc32, 'decrypted header crc32 mismatch (wrong aeskey!)'
 
@@ -235,12 +238,11 @@ def main(argv):
         print('usage: ', path.basename(argv[1]), '<upgrade.msd> <aeskey>')
     elif not path.exists(argv[1]):
         print('msd file not found:', argv[1])
-    elif len(argv[2]) != 32:
-        print('wrong aeskey length! expected 16 bytes in hex form')
+    elif len(argv[2]) != 32 and len(argv[2]) != 64:
+        print('wrong aeskey length! expected 16 or 32 bytes in hex form')
     else:
         print(parse_msdfile(argv[1], bytes.fromhex(argv[2])))
 
 
 if __name__ == "__main__":
     main(sys.argv)
-
